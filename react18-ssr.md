@@ -206,23 +206,27 @@ module.exports = render;
 
 + 需要请求的组件会先返回一个```<template></template>```占位，然后再替换。
 
-##### 2、新版ssr代码：
+##### 2、新版ssr代码：（加上react-router@6版本）
 
 + service.js文件不变，render函数做出如下修改：
 
 ```js
 import React from "react";
-import App from "./src/page/App";
 import { renderToPipeableStream } from "react-dom/server";
+import AppPage from "./src/page/AppPage/index.jsx";
+import { StaticRouter } from "react-router-dom/server";
 
-function render(req, res, assets) {
-  console.log(req.url, "asaaaa");
-  const { pipe } = renderToPipeableStream(<App />, {
-    bootstrapScripts: [assets["main.js"]],
-    onShellReady() {
-      res.statusCode = "200";
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.write(`<!DOCTYPE html>
+function newRender(req, res, assets) {
+  const { pipe } = renderToPipeableStream(
+    <StaticRouter location={req.url}>
+      <AppPage />
+    </StaticRouter>,
+    {
+      bootstrapScripts: [assets["main.js"]],
+      onShellReady() {
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.write(`<!DOCTYPE html>
       <html lang="en">
       <head>
         <meta charset="UTF-8">
@@ -232,16 +236,106 @@ function render(req, res, assets) {
       </head>
       <body>
         <div id="root">`);
-      pipe(res);
-      res.write(`</div>
+        pipe(res);
+        res.write(`</div>
     </body>
     </html>`);
-    },
-  });
+      },
+    }
+  );
 }
 
-module.exports = render;
+module.exports = newRender;
 ```
+
++ 客户端index.js修改如下：
+
+```js
+import React from "react";
+import AppPage from "./src/page/AppPage/index.jsx";
+import { hydrateRoot } from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+
+const root = document.getElementById("root");
+const element = (
+  <BrowserRouter>
+    <AppPage />
+  </BrowserRouter>
+);
+hydrateRoot(root, element);
+```
+
++ AppPage文件如下
+
+```jsx
+import React, { Suspense } from "react";
+import NavList from "../NavList/index.jsx";
+import routerConfig from "../../route/index.js";
+import { useRoutes } from "react-router-dom";
+
+export default function AppPage() {
+  return (
+    <div>
+      <NavList />
+      <Suspense fallback={<div>加载中。。。</div>}>
+        {useRoutes(routerConfig)}
+      </Suspense>
+    </div>
+  );
+}
+```
+
++ routerConfig文件如下
+
+```js
+import React from "react";
+import Header from "../page/Header/index.jsx";
+import Footer from "../page/Footer/index.jsx";
+import User from "../page/User/index.jsx";
+const routerConfig = [
+  {
+    path: "/",
+    element: <Header />,
+    index: true,
+  },
+  {
+    path: "/footer",
+    element: <Footer />,
+  },
+  {
+    path: "/user",
+    element: <User />,
+  },
+];
+
+export default routerConfig;
+```
+
++ NavList组件如下：
+
+```js
+import React, { startTransition } from "react";
+import { useNavigate } from "react-router-dom";
+
+export default function NavList() {
+  const navigate = useNavigate();
+  function handleHistory(url) {
+    startTransition(() => {
+      navigate(url);
+    });
+  }
+  return (
+    <ul>
+      <li onClick={() => handleHistory("/")}>主页</li>
+      <li onClick={() => handleHistory("/footer")}>底部</li>
+      <li onClick={() => handleHistory("/user")}>用户页</li>
+    </ul>
+  );
+}
+
+```
+
+**注意： 此处没有使用Link，原因是由于如果跳转过于频繁，Suspense中内容还没有渲染结束，会导致报错。需要使用startTransition来降低优先级。**
 
 #### 八、useId
 
@@ -252,7 +346,7 @@ module.exports = render;
 ##### 1、安装插件
 
 ```bash
-npm install @babel/core @babel/preset-env  @babel/preset-react babel-loader express react-router-dom webpack webpack-cli @babel/plugin-transform-modules-commonjs @babel/register cross-env nodemon react react-dom --save
+npm install @babel/core @babel/preset-env  @babel/preset-react babel-loader express react-router-dom webpack webpack-cli @babel/plugin-transform-modules-commonjs @babel/register cross-env nodemon react react-dom @babel/plugin-transform-runtime --save
 ```
 
 ##### 2、webpack.config.js
@@ -262,8 +356,8 @@ const path = require("path");
 
 module.exports = {
   mode: "development",
-  devtool: false,
-  entry: "./src/index.js",
+  devtool: 'source-map',
+  entry: "./index.js",
   output: {
     filename: "main.js",
     path: path.resolve(__dirname, "build"),
@@ -272,16 +366,18 @@ module.exports = {
   module: {
     rules: [
       {
-        test: /\.(js|jsx)$/,
+        test: /\.(jsx|js)$/,
         exclude: /node_modules/,
-        loader: "babel-loader",
-        options: {
-          presets: ["@babel/preset-env", "@babel/preset-react"],
+        use: {
+          loader: "babel-loader",
+          options: {
+            presets: ["@babel/preset-env", "@babel/preset-react"],
+            plugins: ["@babel/plugin-transform-runtime"],
+          },
         },
       },
     ],
   },
 };
-
 ```
 

@@ -1,7 +1,7 @@
 import React from "react";
-import Header from "../page/Header";
-import Footer from "../page/Footer";
-import User from "../page/User";
+import Header from "../page/Header/index.jsx";
+import Footer from "../page/Footer/index.jsx";
+import User from "../page/User/index.jsx";
 const routerConfig = [
   {
     path: "/",

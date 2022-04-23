@@ -1,5 +1,5 @@
 import React from "react";
-import App from "./src/page/App";
+import App from "./src/page/AppPage";
 import { renderToString } from "react-dom/server";
 
 function render(req, res, assets) {
